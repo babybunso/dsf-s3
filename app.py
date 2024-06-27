@@ -1,17 +1,133 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import openai
+from openai import OpenAI
+import chromadb
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+import spacy
+import spacy_streamlit
+from wordcloud import WordCloud
+from sklearn.feature_extraction import text
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 
 
 #####     CONSTANTS     #####
+OPEN_APIKEY = ""
+EMBEDDING_MODEL = 'text-embedding-3-large'  # 'text-embedding-3-small'
+SPACY_MODEL = spacy.load('en_core_web_sm') # 'en_core_web_lg'
 SDG = ["No Poverty", "Zero Hunger", "Good Health and Well-being", "Gender Equality", "Clean Water and Sanitation", "Affordable and Clean Energy", "Decent Work and Economic Growth", "Industry, Innovation and Infrastructure", "Reduced Inequalities", "Sustainable Cities and Economies", "Responsible Consumption and Production", "Climate Action", "Life Below Water", "Life on Land", "Peace, Justice and Strong Institutions", "Partnership for the Goals"]
 APP_NAME = 'SONAS: Semantic OpenAI NLP Assistant System'
 APP_DESC = ' `@Team Rods` - Medyo mahiyain pa, pero sakto lang ang Group Dynamix'
 COLOR_BLUE = '#0038a8'
 COLOR_RED = '#ce1126'
+COLOR_LIGHTER_RED = "#FFF2F2"
 COLOR_GRAY = '#f8f8f8'
 
+# Load SONA dataset
+df = pd.read_csv("data/sonas.csv")
 
 #####     FUNCTIONS     #####
+def get_openai_client():
+    """Function to create OpenAI Client"""
+    openai.api_key = OPENAI_APIKEY
+    client = OpenAI(api_key=OPENAI_APIKEY)
+    return client
+
+
+def init_chroma_db(collection_name, db_path='sonas.db'):
+    """Function to initialize chromadb client"""
+    # Create a Chroma Client
+    chroma_client = chromadb.PersistentClient(path=db_path)
+
+    # Create an embedding function
+    embedding_function = OpenAIEmbeddingFunction(api_key=OPENAI_APIKEY, model_name=EMBEDDING_MODEL)
+
+    # Create a collection
+    collection = chroma_client.get_or_create_collection(name=collection_name, embedding_function=embedding_function)
+
+    return collection
+
+
+def general_semantic_search(Q, k=3, collection=None):
+    """Function to query the whole collection"""
+    results = collection.query(
+        query_texts=[Q], # Chroma will embed this for you
+        n_results=k, # how many results to return,
+    )
+    return results
+
+
+def specific_semantic_search(Q, k=3, collection=None, metadata_key = "", meta_val = ""):
+    """Function to query a subset of the collection (based on a metadata)"""
+    results = collection.query(
+        query_texts=[Q], # Chroma will embed this for you
+        n_results=k, # how many results to return,
+        where={f"{metadata_key}": f"{meta_val}"} # specific data only
+    )
+    return results
+
+
+def generate_response(task, prompt, llm):
+    """Function to generate a response from the LLM given a specific task and user prompt"""
+    response = llm.chat.completions.create(
+        model='gpt-3.5-turbo',
+        messages=[
+            {'role': 'system', 'content': f"Perform the specified task: {task}"},
+            {'role': 'user', 'content': prompt}
+        ]
+    )
+
+    return response.choices[0].message.content
+    
+
+def generate_summary(doc, llm, word_limit=None):
+    """Function to ask the LLM to create a summary"""
+    task = "Text Summarization"
+    prompt = "Summarize this document"
+    if word_limit:
+        prompt += f" in {word_limit} words"
+
+    prompt += f":\n\n{doc}"
+    response = generate_response(task, prompt, llm)
+    return response
+
+
+def generate_translation(doc, llm, lang="Tagalog"):
+    """Function to translate a document from English to Language of Choice"""
+    task = 'Text Translation'
+    prompt = f"Translate this document from English to {lang}:\n\n{doc}"
+    response = generate_response(task, prompt, llm)
+
+    return response
+
+
+def generate_key_themes(doc, llm, top_k=5):
+    """Function to get the main points/themes of a document"""
+    task = "Main points or theme extraction or topic modeling"
+    prompt = f"Extract and list the top {top_k} main themes in this document:\n\n{doc}"
+    # prompt = f"Extract and list the top {top_k} main themes in this document:\n\n....{doc}...."
+    response = generate_response(task, prompt, llm)
+    return response
+
+
+def summarize_single_SONA(collection=None, title="", llm=None):
+    """Function to get the summary of a whole SONA"""
+    lst_of_docs = collection.get(where={"title": title}, include=['documents'])['documents']
+    lst_of_summaries = []
+
+    # Get the summary of each doc and put it in the list
+    for doc in lst_of_docs:
+        summary = generate_summary(doc, llm)
+        lst_of_summaries.append(summary)
+
+    # Ask the LLM to create a summary based on the list of summaries
+    task = "Text Summarization"
+    prompt = f"From a list of summaries, create a one paragraph comprehensive summary. Make sure to include statistcs, action points, and policies as much as possible:\n\n{lst_of_summaries}"
+    response = generate_response(task, prompt, llm)
+
+    return response
 
 
 ##### STYLED COMPONENTS #####
@@ -180,8 +296,12 @@ def president_card(name, img_path, info, themes):
 
 
 #####     MAIN SITE     #####
-# Load SONA dataset
-df = pd.read_csv("data/sonas.csv")
+
+# Initialize chroma db
+collection = init_chroma_db(collection_name="sonas", db_path="sonas.db")
+
+# Initialize OpenAI client
+llm = get_openai_client()
 
 # Create streamlit app
 st.set_page_config(layout='wide')
@@ -195,6 +315,8 @@ options = st.sidebar.radio("", ["Home", "SONA Summarizer", "Presidential Analysi
 eng_sum = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum condimentum, ante vel interdum imperdiet, enim diam euismod dolor, hendrerit imperdiet orci ipsum et dolor. Nullam congue id libero sed ultrices. Mauris facilisis convallis massa, ac ornare leo fermentum ac. Quisque ultricies ultrices orci, consequat feugiat turpis cursus tempus. Pellentesque facilisis, mauris quis tincidunt consequat, urna mi aliquam velit, gravida euismod dui libero in dolor. Sed sed elit eu sem fringilla interdum eu vel urna. Duis sollicitudin fermentum fringilla. Nunc rhoncus, magna at finibus accumsan, urna risus facilisis est, pretium dignissim tortor dolor quis ex. Integer viverra malesuada condimentum. Sed at quam congue, varius felis eget, venenatis risus. Aenean ultrices orci sit amet ex pharetra tempor. Ut a aliquam mi, id accumsan magna. Mauris a blandit leo. Sed et erat neque."
 
 fil_sum = "Praesent egestas tristique justo, a tempor odio gravida non. Curabitur diam nisl, egestas vitae fermentum ac, pellentesque at risus. Ut sagittis lectus ac mollis auctor. Suspendisse nec urna nec nisi auctor commodo non ac nibh. In vitae est nec leo scelerisque pulvinar sit amet ac felis. Etiam porta euismod laoreet. Duis ullamcorper, justo in placerat fringilla, enim ante consectetur arcu, sit amet ultricies ligula dui iaculis neque. Nullam eu augue aliquam, convallis tellus eget, fringilla velit. Ut ac maximus nunc, vel molestie magna. Ut non magna nisi. Vestibulum cursus urna varius eros mattis, ut accumsan ante consectetur. Donec quis leo pretium, sagittis nibh non, maximus libero. Proin rhoncus tortor ut tellus elementum, porttitor tristique velit congue. Class aptent taciti sociosqu."
+
+bis_sum = "Nullam eu augue aliquam, convallis tellus eget, fringilla velit. Ut ac maximus nunc, vel molestie magna. Ut non magna nisi. Vestibulum cursus urna varius eros mattis, ut accumsan ante consectetur. Donec quis leo pretium, sagittis nibh non, maximus libero. Proin rhoncus tortor ut tellus elementum, porttitor tristique velit congue. Class aptent taciti sociosqu."
 
 theme = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum condimentum, ante vel interdum imperdiet, enim diam euismod dolor, hendrerit imperdiet orci ipsum et dolor. Nullam congue id libero sed ultrices. Mauris facilisis convallis massa, ac ornare leo fermentum ac. Quisque ultricies ultrices orci, consequat feugiat turpis cursus tempus. Pellentesque facilisis, mauris quis tincidunt consequat, urna mi aliquam velit, gravida euismod dui libero in dolor. Sed sed elit eu sem fringilla interdum eu vel urna. Duis sollicitudin fermentum fringilla."
 
@@ -222,7 +344,10 @@ elif options == "SONA Summarizer":
         keywords_line(keywords)
         st.caption(link)
 
-        summary_cards(eng_sum, fil_sum)
+        # eng_sum = summarize_single_SONA(collection, title, llm)
+        # fil_sum = generate_translation(eng_sum, llm, "Tagalog")
+        # bis_sum = generate_translation(eng_sum, llm, "Bisaya")
+        summary_cards(eng_sum, fil_sum, bis_sum)
         
         filipino_ver_toggle = st.toggle(label="Use Filipino Translation", value=False)
 
