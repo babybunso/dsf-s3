@@ -29,7 +29,7 @@ COLOR_LIGHTER_RED = "#FFF2F2"
 COLOR_GRAY = '#f8f8f8'
 
 # Load SONA dataset
-df = pd.read_csv("data/sonas.csv")
+df = pd.read_csv("https://github.com/babybunso/dsf-s3/blob/master/data/sonas.csv")
 sonas_df = pd.read_csv("https://github.com/babybunso/dsf-s3/blob/master/data/edited_sonas_with_summary_and_score.csv")
 
 #####     FUNCTIONS     #####
@@ -40,7 +40,7 @@ def get_openai_client():
     return client
 
 
-def init_chroma_db(collection_name, db_path='sonas_new.db'):
+def init_chroma_db(collection_name, db_path='https://github.com/babybunso/dsf-s3/tree/master/sonas_new.db'):
     """Function to initialize chromadb client"""
     # Create a Chroma Client
     chroma_client = chromadb.PersistentClient(path=db_path)
