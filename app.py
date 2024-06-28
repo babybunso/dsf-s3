@@ -503,7 +503,7 @@ def president_card(name, img_path, info, themes):
 #####     MAIN SITE     #####
 
 # Initialize chroma db
-collection = init_chroma_db(collection_name="sonas", db_path="sonas_new.db")
+collection = init_chroma_db(collection_name="sonas", db_path="https://github.com/babybunso/dsf-s3/blob/master/sonas_new.db")
 
 # Initialize OpenAI client
 llm = get_openai_client()
