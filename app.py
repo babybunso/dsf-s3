@@ -651,7 +651,7 @@ elif options == "Query Analysis":
         }
 
         results_df = pd.DataFrame(data_dict)
-        cols = st.columns(results_df['title'].nunique())
+        cols = st.columns(int(results_df['title'].nunique()))
         unique_titles = results_df['title'].unique()
 
         sources = []
