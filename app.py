@@ -33,8 +33,8 @@ COLOR_LIGHTER_RED = "#FFF2F2"
 COLOR_GRAY = '#f8f8f8'
 
 # Load SONA dataset
-df = pd.read_csv("https://github.com/babybunso/dsf-s3/blob/master/data/sonas.csv")
-sonas_df = pd.read_csv("https://github.com/babybunso/dsf-s3/blob/master/data/edited_sonas_with_summary_and_score.csv")
+df = pd.read_csv("data/sonas.csv")
+sonas_df = pd.read_csv("data/edited_sonas_with_summary_and_score.csv")
 
 #####     FUNCTIONS     #####
 def get_openai_client():
